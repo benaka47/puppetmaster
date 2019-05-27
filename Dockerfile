@@ -33,7 +33,6 @@ RUN wget -O docker-18.09.6.tgz https://download.docker.com/linux/static/stable/x
 RUN tar xvzf docker-18.09.6.tgz
 RUN sudo mv docker/docker /usr/bin/docker
 RUN chmod +x /usr/bin/docker
-RUN docker version
 RUN rm -rf docker/
 
 
