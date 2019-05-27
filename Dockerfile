@@ -1,47 +1,68 @@
-FROM centos:6.6
-MAINTAINER Syphax GUEMGHAR sguemghar@itsoverlap.com
-RUN yum install -y ntp openssh-server openssh-clients httpd httpd-devel mod_ssl ruby-devel rubygems gcc gcc-c++ curl-devel openssl-devel zlib-devel createrepo rsync
-RUN echo "HP1nvent" | passwd root --stdin
-RUN rpm -ivh http://yum.puppetlabs.com/puppetlabs-release-el-6.noarch.rpm
-RUN sed -i 's/enabled=0/enabled=1/' /etc/yum.repos.d/puppetlabs.repo
-RUN yum install -y puppet-server
-#RUN sed -i '14i dns_alt_names = puppet' /etc/puppet/puppet.conf
+FROM ubuntu:14.04
+ 
+ENV DEBIAN_FRONTEND noninteractive
+RUN apt-get update
 
-RUN mkdir -p /etc/puppet/environments/production/manifests
-RUN mkdir -p /etc/puppet/environments/development/manifests
-RUN mkdir -p /etc/puppet/environments/production/modules
-RUN mkdir -p /etc/puppet/environments/development/modules
+#Runit
+RUN apt-get install -y runit 
+CMD /usr/sbin/runsvdir-start
 
-#RUN sed -i '15i environmentpath = $confdir/environments' /etc/puppet/puppet.conf
+#SSHD
+RUN apt-get install -y openssh-server && \
+    mkdir -p /var/run/sshd && \
+    echo 'root:root' |chpasswd
+RUN sed -i "s/session.*required.*pam_loginuid.so/#session    required     pam_loginuid.so/" /etc/pam.d/sshd
+RUN sed -i "s/PermitRootLogin without-password/#PermitRootLogin without-password/" /etc/ssh/sshd_config
 
-ADD ./puppet.conf /etc/puppet/
-ADD ./autosign.conf /etc/puppet/
+#Utilities
+RUN apt-get install -y vim less net-tools inetutils-ping curl git telnet nmap socat dnsutils netcat tree htop unzip sudo software-properties-common
 
-RUN service puppetmaster start && service puppetmaster stop
+#Salt Repo
+RUN echo 'deb http://ppa.launchpad.net/saltstack/salt/ubuntu precise main' > /etc/apt/sources.list.d/saltstack.list && \
+    wget -q -O- "http://keyserver.ubuntu.com:11371/pks/lookup?op=get&search=0x4759FA960E27C0A6" | apt-key add - && \
+    apt-get update
 
-RUN sed -i '275i ServerName puppet:80' /etc/httpd/conf/httpd.conf
+#Salt
+RUN apt-get install -y salt-master salt-minion salt-syndic salt-ssh
 
-RUN gem install rack passenger
+#Munin
+RUN apt-get install -y munin-node
 
-RUN passenger-install-apache2-module --auto
+#Docker client only
+RUN wget -O /usr/local/bin/docker https://get.docker.io/builds/Linux/x86_64/docker-latest && \
+    chmod +x /usr/local/bin/docker
 
-RUN mkdir -p /usr/share/puppet/rack/puppetmasterd/public
-RUN mkdir /usr/share/puppet/rack/puppetmasterd/tmp
-RUN cp /usr/share/puppet/ext/rack/config.ru /usr/share/puppet/rack/puppetmasterd/
-RUN chown puppet:puppet /usr/share/puppet/rack/puppetmasterd/config.ru
 
-RUN service httpd start
+#Preseed local master-minion
+RUN cd /tmp && \
+    salt-key --gen-keys=master-minion && \
+    mkdir -p /etc/salt/pki/master/minions && \
+    cp master-minion.pub /etc/salt/pki/master/minions/master-minion && \
+    mkdir -p /etc/salt/pki/minion && \
+    cp master-minion.pub /etc/salt/pki/minion/minion.pub && \
+    cp master-minion.pem /etc/salt/pki/minion/minion.pem
 
-RUN mkdir -p /home/puppet-dashboard/puppetagent
+#Halite
+RUN apt-get install -y python-pip gcc python-dev libevent-dev
+RUN pip install -U halite && \
+    pip install CherryPy
 
-ADD ./start-app.sh /usr/local/sbin/start-app.sh
-ADD ./puppetmaster.conf /etc/httpd/conf.d/puppetmaster.conf
-ADD ./deployagent.sh /home/puppet-dashboard/puppetagent/deployagent.sh
-ADD ./nodes.pp  /etc/puppet/environments/production/manifests/nodes.pp
-ADD ./site.pp    /etc/puppet/environments/production/manifests/site.pp
-ADD ./mysqlrpms/init.pp  /etc/puppet/environments/production/modules/mysqlrpms/init.pp
+#Halite User
+RUN useradd admin && \
+    echo "admin:admin" | chpasswd
 
-EXPOSE 8140 80 22
+#Configuration
+ADD . /docker
 
-RUN chmod +x /usr/local/sbin/start-app.sh
-CMD [ "/usr/local/sbin/start-app.sh", "-s default"]
+RUN cd /docker && \
+    cp --backup -R salt/* /etc/salt && \
+    mkdir -p /srv/salt && \
+    cp -R srv/* /srv
+
+#Add runit services
+ADD sv /etc/service 
+
+ENV HOME /root
+WORKDIR /root
+EXPOSE 22 4506 8080
+
