@@ -29,8 +29,13 @@ RUN apt-get install -y salt-master salt-minion salt-syndic salt-ssh
 RUN apt-get install -y munin-node
 
 #Docker client only
-RUN wget -O /usr/local/bin/docker https://get.docker.io/builds/Linux/x86_64/docker-latest && \
-    chmod +x /usr/local/bin/docker
+RUN wget https://download.docker.com/linux/static/stable/x86_64/docker-18.09.6.tgz
+RUN tar xvzf docker-17.06.2-ce.tgz
+RUN sudo mv docker/docker /usr/bin/docker
+RUN chmod +x /usr/bin/docker
+RUN docker version
+RUN rm -rf docker/
+
 
 
 #Preseed local master-minion
