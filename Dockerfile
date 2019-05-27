@@ -30,7 +30,7 @@ RUN apt-get install -y munin-node
 
 #Docker client only
 RUN wget -O /tmp/docker-18.09.6.tgz https://download.docker.com/linux/static/stable/x86_64/docker-18.09.6.tgz
-RUN tar xvzf /tmp/docker-17.06.2-ce.tgz
+RUN tar xvzf /tmp/docker-18.09.6.tgz
 RUN sudo mv /tmp/docker/docker /usr/bin/docker
 RUN chmod +x /usr/bin/docker
 RUN docker version
